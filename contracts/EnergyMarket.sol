@@ -110,7 +110,15 @@ contract EnergyMarket is Ownable{
 
     function registerConsumption(uint64 amount) onlyConsumers external {
         require(amount >= kWh);
-        consumers[msg.sender].energyConsumed += amount;
+
+        if (consumers[msg.sender].energyLeftover >= amount) {
+            consumers[msg.sender].energyLeftover -= amount
+        } else {
+            amount -= consumers[msg.sender].energyLeftover
+            consumers[msg.sender].energyConsumed += amount;
+
+        }
+        
     }
 
     function energyBalance() public view {
@@ -159,9 +167,10 @@ contract EnergyMarket is Ownable{
     }
 
     //Deixar apenas acceptbid e criar a ask no momento da venda.
-    function acceptBid(uint32 bidId) onlyConsumers public {
+    function acceptBid(uint32 bidId) onlyConsumers public payable {
         bid = bids[bidId];
-
+        require(msg.value >= bid.kWhPrice);
+        uint64 amountPaid = msg.value;
         // Retira do consumido a quantidade que o consumer comprou. Se o consumo ficar
         // abaixo de zero, vira sobra de energia.
         uint64 leftover = consumers[msg.sender].energyConsumed - bid.amount;
@@ -178,7 +187,7 @@ contract EnergyMarket is Ownable{
         // Delete do meio
         // Pega o ultimo, coloca nesse lugar
         // Atualiza o id do ultimo
-        
+        bid.owner.transfer(amountPaid);
         
     }
     
