@@ -11,6 +11,7 @@ contract EnergyMarket is Ownable{
     // Consumer Structure.
     struct Consumer {
         uint32 id_;
+        string name;
         bool producer;
         uint64 energyProduced;
         uint64 energyConsumed;
@@ -45,7 +46,10 @@ contract EnergyMarket is Ownable{
         bool status;
     }
 
-    Bid[] public bids;
+    Bid[] private bids;
+
+    address[] private allConsumers;
+
 
     //Events logs registered in blockchain.
     event RegisterConsumer(address indexed consumer);
@@ -64,7 +68,6 @@ contract EnergyMarket is Ownable{
     mapping(address => uint[]) private bidsIndex;
     
     
-    
     //Variable associated to generation of an unique ID.
     uint32 counter = 0;
 
@@ -73,9 +76,11 @@ contract EnergyMarket is Ownable{
 
 
     //Register new energy consumer.
-    function registerConsumer(address consumer) public onlyOwner {
+    function registerConsumer(address consumer, string memory name) public onlyOwner {
         uint32 newid = getID();
         consumers[consumer].id_ = newid; 
+        consumers[consumer].name = name;
+        allConsumers.push(consumer);
         emit RegisterConsumer(consumer);
 
     }
@@ -171,14 +176,19 @@ contract EnergyMarket is Ownable{
     }
 
     //List bid ids of specific producer.
-    function listBids(address producer) public view returns (uint[] memory) {
-        return (bidsIndex[producer]);
+    function listBids(address producer) public view returns (string memory, uint[] memory) {
+        return (consumers[producer].name, bidsIndex[producer]);
+    }
+    
+    //List consumers.
+    function listConsumers() public view returns (address[] memory) {
+        return (allConsumers);
     }
 
     //List information of specific bid.
     function getBid(uint index) public view returns (uint32, uint64, uint32, uint64, uint){
         return (bids[index].kWhPrice, bids[index].amount, bids[index].day, bids[index].timestamp, bids[index].bidId);
     }
-
+    
 
 }
