@@ -1,15 +1,23 @@
-pragma solidity ^0.4.24;
+pragma solidity ^0.6.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+//Truffle import
+//import "@openzeppelin/contracts/access/Ownable.sol";
+
+//Remix import
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable.sol";
 
 contract EnergyMarket is Ownable{
 
+    // Consumer Structure.
     struct Consumer {
         uint32 id_;
         bool producer;
         uint64 energyProduced;
         uint64 energyConsumed;
         uint64 energyBidded;
+             // Energy remnant
+        uint64 energyLeftover;
+        
     }
 
     // Energy Constants - Minimum transacted is 1kWh
@@ -19,10 +27,10 @@ contract EnergyMarket is Ownable{
     uint64 constant TWh = 1000 * GWh;
     uint64 constant maxEnergy = 18446 * GWh;
 
-    // Bid Structure
+    // Bid Structure.
     struct Bid {
         // Bid owner`s id
-        address owner;
+        address payable owner;
         // day for which the offer is valid
         uint32 day;
         // Price for each kWh
@@ -32,147 +40,120 @@ contract EnergyMarket is Ownable{
         // Timestamp for when the offer was submitted
         uint64 timestamp;
         // Bid Id
-        uint32 bidId;
-        // Energy remnant
-        uint64 Leftover;
+        uint bidId;
+        // Bid Status
+        bool status;
     }
 
     Bid[] public bids;
-    // map (address, day) to index into bids
-    // mapping(address => mapping(uint32 => uint)) public bidsByDay;
 
-    // Ask Structure
-    struct Ask {
-        // Ask owner`s id
-        address owner;
-        // day for which the offer is valid
-        uint32 day;
-        // Price for each kWh
-        uint32 kWhPrice;
-        // Amount of energy being bought
-        uint64 amount;
-        // Timestamp for when the offer was submitted
-        uint64 timestamp;
-    }
-
-    Ask[] public asks;
-
-    event RegisterConsumer(address indexed producer);
-    event RegisterProducer(address indexed consumer);
+    //Events logs registered in blockchain.
+    event RegisterConsumer(address indexed consumer);
+    event RegisterProducer(address indexed producer);
 
     event CreatedBid(address indexed producer, uint32 indexed day, uint32 indexed price, uint64 amount);
-    event CreatedAsk(address indexed consumer, uint32 indexed day, uint32 indexed price, uint64 amount);
 
+    event DealMade(address indexed producer, address indexed consumer, uint32 indexed day, uint32 price, uint64 amount);
+
+
+
+    //Map each consumer to its address.
+    mapping(address => Consumer) private consumers;
+
+    //Map each consumer to its bidIds array
+    mapping(address => uint[]) private bidsIndex;
+    
+    
     
     //Variable associated to generation of an unique ID.
     uint32 counter = 0;
 
     //Generates unique ID consumer.
-    function getID() returns(uint32) { return ++counter; } 
-
-    //Map each consumer to its address.
-    mapping(address => Consumer) private consumers;
+    function getID() internal returns(uint32) { return ++counter; } 
 
 
-    //TODO: checar se herança onlyOwner faz sentido.
     //Register new energy consumer.
-    function registerConsumer(address consumer) onlyOwner {
-        newid = getID()
+    function registerConsumer(address consumer) public onlyOwner {
+        uint32 newid = getID();
         consumers[consumer].id_ = newid; 
-        emit RegisterConsuemr(consumer);
+        emit RegisterConsumer(consumer);
 
     }
 
-    //Importar de dentro da função?
     modifier onlyConsumers {
-            require(consumers[msg.sender]);
-            _;
+        require(consumers[msg.sender].id_ > 0);
+        _;
     }
 
     //Register new energy producer.
-    function registerProducer(address consumer) onlyOwner {
-
+    function registerProducer(address consumer) public onlyOwner {
         consumers[consumer].producer = true; 
         emit RegisterProducer(consumer);
 
     }
 
-    //Importar de dentro da função?
     modifier onlyProducers {
         require(consumers[msg.sender].producer);
         _;
     }
 
-    function registerProduction(uint64 amount) onlyProducers external {
+    //Register energy production.
+    function registerProduction(uint64 amount) onlyProducers public {
         require(amount >= kWh);
         consumers[msg.sender].energyProduced += amount;
     }
 
-    function registerConsumption(uint64 amount) onlyConsumers external {
+    //Register energy consumption.
+    function registerConsumption(uint64 amount) onlyConsumers public {
         require(amount >= kWh);
 
         if (consumers[msg.sender].energyLeftover >= amount) {
-            consumers[msg.sender].energyLeftover -= amount
+            consumers[msg.sender].energyLeftover -= amount;
         } else {
-            amount -= consumers[msg.sender].energyLeftover
+            amount -= consumers[msg.sender].energyLeftover;
             consumers[msg.sender].energyConsumed += amount;
 
         }
         
     }
 
-    function energyBalance() public view {
-        return consumers[msg.sender].energyProduced - consumers[msg.sender].energyConsumed;
+    //Check own balance
+    function energyBalance() public view returns (uint64) {
+        return (consumers[msg.sender].energyProduced + consumers[msg.sender].energyLeftover - consumers[msg.sender].energyConsumed);
     }
 
-    function bid(uint32 bidDay, uint32 bidPrice, uint64 bidAmount, uint64 bidTimestamp) onlyProducers external public {
+    //Create an offer.
+    function bid(uint32 bidDay, uint32 bidPrice, uint64 bidAmount, uint64 bidTimestamp) onlyProducers public {
         uint64 balance = energyBalance();
-        require(balance >= consumers[msg.sender].energyBided + amount);
-        require(askAmount >= kWh);
+        require(balance >= consumers[msg.sender].energyBidded + bidAmount);
+        require(bidAmount >= kWh);
         
-        consumers[msg.sender].energyBided += amount;
+        consumers[msg.sender].energyBidded += bidAmount;
 
-        Bid bid = Bid({
+        Bid memory bid = Bid({
             owner: msg.sender,
             day: bidDay,
             kWhPrice: bidPrice,
             amount: bidAmount,
             timestamp: bidTimestamp,
-            bidId: bids.length 
-        })
+            bidId: bids.length,
+            status: true
+        });
+        
 
         bids.push(bid);
+        bidsIndex[msg.sender].push(bid.bidId);
 
         emit CreatedBid(msg.sender, bidDay, bidPrice, bidAmount);
     }
 
-    function ask(uint32 askDay, uint32 askPrice, uint64 askAmount, uint64 askTimestamp) onlyConsumers external public {
-        require(askAmount >= kWh);
-
-        Ask ask = ask({
-            owner: msg.sender,
-            day: askDay,
-            kWhPrice: askPrice,
-            amount: askAmount,
-            timestamp: askTimestamp 
-        })
-        asks.push(ask);
-
-        emit CreatedAsk(msg.sender, askDay, askPrice, askAmount);
-    }
-
-
-    function listBids() view returns(bids) {
-        return bids;
-    }
-
-    //Deixar apenas acceptbid e criar a ask no momento da venda.
-    function acceptBid(uint32 bidId) onlyConsumers public payable {
-        bid = bids[bidId];
-        require(msg.value >= bid.kWhPrice);
-        uint64 amountPaid = msg.value;
-        // Retira do consumido a quantidade que o consumer comprou. Se o consumo ficar
-        // abaixo de zero, vira sobra de energia.
+    //Accept offer.
+    function acceptBid(uint bidId) onlyConsumers public payable {
+        Bid memory bid = bids[bidId];
+        require(msg.value >= bid.kWhPrice*bid.amount);
+        uint amountPaid = msg.value;
+        
+        //Remnant energy if consumed less than the amount bought.
         uint64 leftover = consumers[msg.sender].energyConsumed - bid.amount;
         if (leftover < 0) {
             consumers[msg.sender].energyLeftover = - leftover;
@@ -181,22 +162,23 @@ contract EnergyMarket is Ownable{
             consumers[msg.sender].energyConsumed -= bid.amount;
         }
 
-        consumers[msg.sender].energyConsumed -= bid.amount;
-        delete bids[bidId]
+        bid.status = false;
+        consumers[bid.owner].energyBidded -= bid.amount;
 
-        // Delete do meio
-        // Pega o ultimo, coloca nesse lugar
-        // Atualiza o id do ultimo
         bid.owner.transfer(amountPaid);
-        
-    }
-    
-    function acceptAsk() {
+        emit DealMade(bid.owner, msg.sender, bid.day, bid.kWhPrice, bid.amount);
         
     }
 
-    function transact()
+    //List bid ids of specific producer.
+    function listBids(address producer) public view returns (uint[] memory) {
+        return (bidsIndex[producer]);
+    }
 
-    function moneyBalance()
+    //List information of specific bid.
+    function getBid(uint index) public view returns (uint32, uint64, uint32, uint64, uint){
+        return (bids[index].kWhPrice, bids[index].amount, bids[index].day, bids[index].timestamp, bids[index].bidId);
+    }
+
 
 }
