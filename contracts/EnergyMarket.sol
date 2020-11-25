@@ -49,6 +49,7 @@ contract EnergyMarket is Ownable{
     Bid[] private bids;
 
     address[] private allConsumers;
+    address[] private allProducers;
 
 
     //Events logs registered in blockchain.
@@ -93,6 +94,7 @@ contract EnergyMarket is Ownable{
     //Register new energy producer.
     function registerProducer(address consumer) public onlyOwner {
         consumers[consumer].producer = true; 
+        allProducers.push(consumer);
         emit RegisterProducer(consumer);
 
     }
@@ -184,11 +186,16 @@ contract EnergyMarket is Ownable{
     function listConsumers() public view returns (address[] memory) {
         return (allConsumers);
     }
+    
+    function listProducers() public view returns (address[] memory) {
+        return (allProducers);
+    }
+    
 
     //List information of specific bid.
     function getBid(uint index) public view returns (uint32, uint64, uint32, uint64, uint){
         return (bids[index].kWhPrice, bids[index].amount, bids[index].day, bids[index].timestamp, bids[index].bidId);
     }
     
-
+    
 }
